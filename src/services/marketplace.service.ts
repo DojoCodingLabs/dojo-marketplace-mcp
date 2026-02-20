@@ -31,10 +31,13 @@ export interface MarketplaceReview {
 }
 
 export interface InstalledItem {
-  id: string;
   name: string;
-  version: string;
-  installedAt: string;
+  slug: string;
+  category: string;
+  version_installed: string;
+  installed_at: string;
+  is_verified: boolean;
+  has_update: boolean;
 }
 
 export interface UserProfile {
@@ -103,7 +106,39 @@ export class MarketplaceService {
 
   async listInstalled(): Promise<InstalledItem[]> {
     logger.debug("MarketplaceService.listInstalled (stub)");
-    return []; // TODO (DOJ-2011)
+    // TODO (DOJ-2011): Replace with real get_user_marketplace_installs RPC call.
+    // Real implementation: fetch installs, compare version_installed against
+    // latest available version to derive has_update, sort by installed_at desc.
+    const items: InstalledItem[] = [
+      {
+        name: "Dojo TypeScript Snippets",
+        slug: "dojo-ts-snippets",
+        category: "snippets",
+        version_installed: "1.2.0",
+        installed_at: "2026-02-15T10:30:00Z",
+        is_verified: true,
+        has_update: true,
+      },
+      {
+        name: "React Component Generator",
+        slug: "react-component-gen",
+        category: "generators",
+        version_installed: "2.0.1",
+        installed_at: "2026-02-10T08:00:00Z",
+        is_verified: true,
+        has_update: false,
+      },
+      {
+        name: "ESLint Config Dojo",
+        slug: "eslint-config-dojo",
+        category: "configs",
+        version_installed: "0.9.0",
+        installed_at: "2026-01-28T14:00:00Z",
+        is_verified: false,
+        has_update: false,
+      },
+    ];
+    return items;
   }
 
   // Publish
