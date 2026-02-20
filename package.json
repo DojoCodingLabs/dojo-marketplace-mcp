@@ -1,5 +1,5 @@
 {
-  "name": "@dojo/marketplace-mcp",
+  "name": "@dojocoding/marketplace-mcp",
   "version": "0.1.0",
   "description": "Dojo Marketplace MCP server — browse, install, and publish marketplace items",
   "type": "module",
