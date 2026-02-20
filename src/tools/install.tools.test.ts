@@ -7,7 +7,7 @@ describe("marketplace_uninstall", () => {
   let service: MarketplaceService;
   let server: McpServer;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let toolHandler: (args: { slug: string }) => Promise<any>;
+  let toolHandler: (args: { itemId: string }) => Promise<any>;
 
   beforeEach(() => {
     service = new MarketplaceService("https://fake.api");
@@ -50,7 +50,7 @@ describe("marketplace_uninstall", () => {
 
   describe("tool handler", () => {
     it("returns JSON-serialized UninstallResult on success", async () => {
-      const response = await toolHandler({ slug: "my-skill" });
+      const response = await toolHandler({ itemId: "my-skill" });
       const parsed = JSON.parse(response.content[0].text);
       expect(parsed).toEqual({
         success: true,
@@ -60,7 +60,7 @@ describe("marketplace_uninstall", () => {
     });
 
     it("does not set isError on success", async () => {
-      const response = await toolHandler({ slug: "anything" });
+      const response = await toolHandler({ itemId: "anything" });
       expect(response.isError).toBeUndefined();
     });
 
@@ -68,13 +68,13 @@ describe("marketplace_uninstall", () => {
       vi.spyOn(service, "uninstall").mockRejectedValueOnce(
         new Error("Network timeout"),
       );
-      const response = await toolHandler({ slug: "fail-slug" });
+      const response = await toolHandler({ itemId: "fail-slug" });
       expect(response.isError).toBe(true);
       expect(response.content[0].text).toContain("Network timeout");
     });
 
     it("includes removal_instructions in response", async () => {
-      const response = await toolHandler({ slug: "my-tool" });
+      const response = await toolHandler({ itemId: "my-tool" });
       const parsed = JSON.parse(response.content[0].text);
       expect(parsed).toHaveProperty("removal_instructions");
       expect(typeof parsed.removal_instructions).toBe("string");

@@ -49,11 +49,11 @@ export function registerInstallTools(
     "marketplace_uninstall",
     "Uninstall a previously installed marketplace item. Idempotent — re-uninstalling returns success.",
     {
-      slug: z.string().describe("The item slug identifier"),
+      itemId: z.string().describe("The unique ID of the item to uninstall"),
     },
     async (args) => {
       try {
-        const result = await service.uninstall(args.slug);
+        const result = await service.uninstall(args.itemId);
         return {
           content: [
             { type: "text" as const, text: JSON.stringify(result, null, 2) },

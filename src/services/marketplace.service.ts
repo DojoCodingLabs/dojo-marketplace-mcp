@@ -102,12 +102,12 @@ export class MarketplaceService {
     return null; // TODO (DOJ-2010)
   }
 
-  async uninstall(slug: string): Promise<UninstallResult> {
-    logger.debug("MarketplaceService.uninstall (stub)", { slug });
+  async uninstall(itemId: string): Promise<UninstallResult> {
+    logger.debug("MarketplaceService.uninstall (stub)", { itemId });
     // TODO: Call Dojo backend toggle_marketplace_install RPC (uninstall action)
     return {
       success: true,
-      item_name: slug,
+      item_name: itemId,
       removal_instructions: "No removal steps required.",
     };
   }
