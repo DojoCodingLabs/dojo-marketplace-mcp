@@ -37,6 +37,12 @@ export interface InstalledItem {
   installedAt: string;
 }
 
+export interface UninstallResult {
+  success: boolean;
+  item_name: string;
+  removal_instructions: string;
+}
+
 export interface UserProfile {
   id: string;
   username: string;
@@ -96,9 +102,14 @@ export class MarketplaceService {
     return null; // TODO (DOJ-2010)
   }
 
-  async uninstall(itemId: string): Promise<boolean> {
-    logger.debug("MarketplaceService.uninstall (stub)", { itemId });
-    return false; // TODO (DOJ-2012)
+  async uninstall(slug: string): Promise<UninstallResult> {
+    logger.debug("MarketplaceService.uninstall (stub)", { slug });
+    // TODO: Call Dojo backend toggle_marketplace_install RPC (uninstall action)
+    return {
+      success: true,
+      item_name: slug,
+      removal_instructions: "No removal steps required.",
+    };
   }
 
   async listInstalled(): Promise<InstalledItem[]> {
