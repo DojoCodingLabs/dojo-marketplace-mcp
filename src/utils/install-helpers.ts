@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { mkdir } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { join, resolve, sep } from "node:path";
 import { homedir } from "node:os";
 import AdmZip from "adm-zip";
 import type { ItemCategory } from "../services/marketplace.service.js";
@@ -28,7 +28,7 @@ const CATEGORY_DIR_MAP: Record<ItemCategory, string> = {
 export function getInstallDir(category: ItemCategory, slug: string): string {
   const baseDir = join(homedir(), ".claude", CATEGORY_DIR_MAP[category]);
   const installDir = resolve(baseDir, slug);
-  if (!installDir.startsWith(baseDir + "/") && installDir !== baseDir) {
+  if (!installDir.startsWith(baseDir + sep) && installDir !== baseDir) {
     throw new Error(`Invalid slug: path traversal detected in "${slug}"`);
   }
   return installDir;
@@ -61,6 +61,17 @@ export async function extractZip(
 ): Promise<void> {
   await mkdir(targetDir, { recursive: true });
   const zip = new AdmZip(zipBuffer);
+  const entries = zip.getEntries();
+
+  for (const entry of entries) {
+    const fullPath = resolve(targetDir, entry.entryName);
+    if (!fullPath.startsWith(targetDir + sep) && fullPath !== targetDir) {
+      throw new Error(
+        `Zip entry path traversal detected: ${entry.entryName}`,
+      );
+    }
+  }
+
   zip.extractAllTo(targetDir, true);
-  logger.debug("ZIP extracted", { targetDir, entries: zip.getEntries().length });
+  logger.debug("ZIP extracted", { targetDir, entries: entries.length });
 }
