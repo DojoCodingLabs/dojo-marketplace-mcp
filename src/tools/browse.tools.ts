@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { MarketplaceService } from "../services/marketplace.service.js";
+import { formatItemDetailMarkdown } from "../utils/format-detail.js";
 
 export function registerBrowseTools(
   server: McpServer,
@@ -8,24 +9,47 @@ export function registerBrowseTools(
 ) {
   const search = server.tool(
     "marketplace_search",
-    "Search the Dojo marketplace for items by query, category, or filters",
+    "Search the Dojo marketplace for skills, plugins, and tools",
     {
-      query: z.string().describe("Search query string"),
-      category: z.string().optional().describe("Filter by category ID"),
-      page: z.number().optional().default(1).describe("Page number"),
-      pageSize: z
-        .number()
+      query: z.string().describe("Search term"),
+      category: z
+        .enum(["skill", "plugin", "tool"])
         .optional()
-        .default(20)
-        .describe("Results per page"),
+        .describe("Filter by category"),
+      tag: z.string().optional().describe("Filter by tag slug"),
+      limit: z
+        .number()
+        .int()
+        .min(1)
+        .max(100)
+        .optional()
+        .default(10)
+        .describe("Maximum number of results to return"),
     },
     async (args) => {
       try {
-        const results = await service.search(args);
+        const response = await service.search(args);
+
+        if (response.items.length === 0) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: `No marketplace items found for query: "${args.query}". Try broader search terms or a different category.`,
+              },
+            ],
+          };
+        }
+
+        const lines: string[] = [JSON.stringify(response.items, null, 2)];
+        if (response.hasMore) {
+          lines.push(
+            `\n(Showing ${response.items.length} of ${response.total} results. Increase 'limit' to see more.)`,
+          );
+        }
+
         return {
-          content: [
-            { type: "text" as const, text: JSON.stringify(results, null, 2) },
-          ],
+          content: [{ type: "text" as const, text: lines.join("") }],
         };
       } catch (err) {
         return {
@@ -136,5 +160,51 @@ export function registerBrowseTools(
     },
   );
 
-  return [search, listCategories, getDetails, getReviews];
+  const getItemDetail = server.tool(
+    "marketplace_detail",
+    "Get full details for a marketplace item by its slug, including description, installation instructions, config snippet, and version history",
+    {
+      slug: z
+        .string()
+        .describe(
+          "The slug identifier of the marketplace item (e.g. 'my-awesome-tool')",
+        ),
+    },
+    async (args) => {
+      try {
+        const detail = await service.getItemDetail(args.slug);
+        if (!detail) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: `Marketplace item not found: "${args.slug}". Check the slug and try again, or use marketplace_search to find available items.`,
+              },
+            ],
+            isError: true,
+          };
+        }
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: formatItemDetailMarkdown(detail),
+            },
+          ],
+        };
+      } catch (err) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Error getting item details: ${(err as Error).message}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  return [search, listCategories, getDetails, getReviews, getItemDetail];
 }

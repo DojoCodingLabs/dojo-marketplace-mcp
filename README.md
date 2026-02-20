@@ -1,11 +1,11 @@
-# @dojo/marketplace-mcp
+# @dojocoding/marketplace-mcp
 
 MCP server for the Dojo Marketplace. Browse, install, and publish marketplace items directly from AI coding assistants.
 
 ## Quick Start
 
 ```bash
-npx -y @dojo/marketplace-mcp@latest
+npx -y @dojocoding/marketplace-mcp@latest
 ```
 
 ### Claude Desktop
@@ -17,7 +17,7 @@ Add to your `claude_desktop_config.json`:
   "mcpServers": {
     "dojo-marketplace": {
       "command": "npx",
-      "args": ["-y", "@dojo/marketplace-mcp@latest"],
+      "args": ["-y", "@dojocoding/marketplace-mcp@latest"],
       "env": {
         "DOJO_API_KEY": "your-api-key"
       }

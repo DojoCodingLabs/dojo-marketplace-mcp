@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Dojo Marketplace MCP server (`@dojo/marketplace-mcp`). Exposes marketplace tools to AI coding assistants via the Model Context Protocol. Dual transport: stdio (default, for `npx` / Claude Desktop) and Streamable HTTP (for hosted deployment).
+Dojo Marketplace MCP server (`@dojocoding/marketplace-mcp`). Exposes marketplace tools to AI coding assistants via the Model Context Protocol. Dual transport: stdio (default, for `npx` / Claude Desktop) and Streamable HTTP (for hosted deployment).
 
 ## Commands
 

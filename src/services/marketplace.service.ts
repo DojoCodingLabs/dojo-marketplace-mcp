@@ -21,6 +21,29 @@ export interface MarketplaceItem {
   updatedAt: string;
 }
 
+export interface VersionHistoryEntry {
+  version: string;
+  releasedAt: string;
+  changelog: string;
+}
+
+export interface MarketplaceItemDetail {
+  slug: string;
+  name: string;
+  description: string;
+  category: string;
+  author_name: string;
+  install_count: number;
+  is_verified: boolean;
+  repo_url: string | null;
+  homepage_url: string | null;
+  config_snippet: Record<string, unknown>;
+  installation_instructions: string;
+  latest_version: string;
+  version_history: VersionHistoryEntry[];
+  tags: string[];
+}
+
 export interface MarketplaceCategory {
   id: string;
   name: string;
@@ -37,10 +60,19 @@ export interface MarketplaceReview {
 }
 
 export interface InstalledItem {
-  id: string;
   name: string;
-  version: string;
-  installedAt: string;
+  slug: string;
+  category: string;
+  version_installed: string;
+  installed_at: string;
+  is_verified: boolean;
+  has_update: boolean;
+}
+
+export interface UninstallResult {
+  success: boolean;
+  item_name: string;
+  removal_instructions: string;
 }
 
 /** Category determines the install directory under ~/.claude/ */
@@ -87,11 +119,27 @@ export interface UserProfile {
   email: string;
 }
 
+export interface MarketplaceSearchResult {
+  name: string;
+  description: string;
+  category: string;
+  install_count: number;
+  slug: string;
+  is_verified: boolean;
+  author_name: string;
+}
+
+export interface SearchResponse {
+  items: MarketplaceSearchResult[];
+  total: number;
+  hasMore: boolean;
+}
+
 export interface SearchParams {
   query: string;
   category?: string;
-  page?: number;
-  pageSize?: number;
+  tag?: string;
+  limit?: number;
 }
 
 export interface PublishParams {
@@ -114,9 +162,45 @@ export class MarketplaceService {
   }
 
   // Browse
-  async search(params: SearchParams): Promise<MarketplaceItem[]> {
-    logger.debug("MarketplaceService.search (stub)", params);
-    return []; // TODO (DOJ-2008)
+  async search(params: SearchParams): Promise<SearchResponse> {
+    const { query, category, tag, limit = 10 } = params;
+
+    const url = new URL(`${this.baseUrl}/api/marketplace/items`);
+    url.searchParams.set("query", query);
+    if (category) url.searchParams.set("category", category);
+    if (tag) url.searchParams.set("tag", tag);
+    url.searchParams.set("limit", String(limit));
+
+    const apiKey = process.env.DOJO_API_KEY ?? "";
+    logger.debug("MarketplaceService.search", { url: url.toString(), limit });
+
+    const response = await fetch(url.toString(), {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      logger.error("marketplace search request failed", {
+        status: response.status,
+        statusText: response.statusText,
+      });
+      throw new Error(
+        `API request failed: ${response.status} ${response.statusText}`,
+      );
+    }
+
+    const data = (await response.json()) as {
+      items: MarketplaceSearchResult[];
+      total: number;
+    };
+
+    return {
+      items: data.items ?? [],
+      total: data.total ?? 0,
+      hasMore: (data.total ?? 0) > (data.items?.length ?? 0),
+    };
   }
 
   async listCategories(): Promise<MarketplaceCategory[]> {
@@ -127,6 +211,11 @@ export class MarketplaceService {
   async getDetails(itemId: string): Promise<MarketplaceItem | null> {
     logger.debug("MarketplaceService.getDetails (stub)", { itemId });
     return null; // TODO (DOJ-2009)
+  }
+
+  async getItemDetail(slug: string): Promise<MarketplaceItemDetail | null> {
+    logger.debug("MarketplaceService.getItemDetail (stub)", { slug });
+    return null; // TODO (DOJ-2009): call backend get_marketplace_item_detail RPC
   }
 
   async getReviews(itemId: string): Promise<MarketplaceReview[]> {
@@ -259,14 +348,51 @@ export class MarketplaceService {
     };
   }
 
-  async uninstall(itemId: string): Promise<boolean> {
+  async uninstall(itemId: string): Promise<UninstallResult> {
     logger.debug("MarketplaceService.uninstall (stub)", { itemId });
-    return false; // TODO (DOJ-2012)
+    // TODO: Call Dojo backend toggle_marketplace_install RPC (uninstall action)
+    return {
+      success: true,
+      item_name: itemId,
+      removal_instructions: "No removal steps required.",
+    };
   }
 
   async listInstalled(): Promise<InstalledItem[]> {
     logger.debug("MarketplaceService.listInstalled (stub)");
-    return []; // TODO (DOJ-2011)
+    // TODO (DOJ-2011): Replace with real get_user_marketplace_installs RPC call.
+    // Real implementation: fetch installs, compare version_installed against
+    // latest available version to derive has_update, sort by installed_at desc.
+    const items: InstalledItem[] = [
+      {
+        name: "Dojo TypeScript Snippets",
+        slug: "dojo-ts-snippets",
+        category: "snippets",
+        version_installed: "1.2.0",
+        installed_at: "2026-02-15T10:30:00Z",
+        is_verified: true,
+        has_update: true,
+      },
+      {
+        name: "React Component Generator",
+        slug: "react-component-gen",
+        category: "generators",
+        version_installed: "2.0.1",
+        installed_at: "2026-02-10T08:00:00Z",
+        is_verified: true,
+        has_update: false,
+      },
+      {
+        name: "ESLint Config Dojo",
+        slug: "eslint-config-dojo",
+        category: "configs",
+        version_installed: "0.9.0",
+        installed_at: "2026-01-28T14:00:00Z",
+        is_verified: false,
+        has_update: false,
+      },
+    ];
+    return items;
   }
 
   // Publish

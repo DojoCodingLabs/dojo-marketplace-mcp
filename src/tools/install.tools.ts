@@ -49,23 +49,17 @@ export function registerInstallTools(
 
   const uninstall = server.tool(
     "marketplace_uninstall",
-    "Uninstall a previously installed marketplace item",
+    "Uninstall a previously installed marketplace item. Idempotent — re-uninstalling returns success.",
     {
       itemId: z.string().describe("The unique ID of the item to uninstall"),
     },
     async (args) => {
       try {
-        const success = await service.uninstall(args.itemId);
+        const result = await service.uninstall(args.itemId);
         return {
           content: [
-            {
-              type: "text" as const,
-              text: success
-                ? `Successfully uninstalled item: ${args.itemId}`
-                : `Item not found or already uninstalled: ${args.itemId}`,
-            },
+            { type: "text" as const, text: JSON.stringify(result, null, 2) },
           ],
-          ...(success ? {} : { isError: true }),
         };
       } catch (err) {
         return {
@@ -87,6 +81,16 @@ export function registerInstallTools(
     async () => {
       try {
         const items = await service.listInstalled();
+        if (items.length === 0) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: "No marketplace items are currently installed. Use marketplace_search to browse available items and marketplace_install to install one.",
+              },
+            ],
+          };
+        }
         return {
           content: [
             { type: "text" as const, text: JSON.stringify(items, null, 2) },
