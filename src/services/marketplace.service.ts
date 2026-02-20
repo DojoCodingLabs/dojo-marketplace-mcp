@@ -43,11 +43,27 @@ export interface UserProfile {
   email: string;
 }
 
+export interface MarketplaceSearchResult {
+  name: string;
+  description: string;
+  category: string;
+  install_count: number;
+  slug: string;
+  is_verified: boolean;
+  author_name: string;
+}
+
+export interface SearchResponse {
+  items: MarketplaceSearchResult[];
+  total: number;
+  hasMore: boolean;
+}
+
 export interface SearchParams {
   query: string;
   category?: string;
-  page?: number;
-  pageSize?: number;
+  tag?: string;
+  limit?: number;
 }
 
 export interface PublishParams {
@@ -70,9 +86,45 @@ export class MarketplaceService {
   }
 
   // Browse
-  async search(params: SearchParams): Promise<MarketplaceItem[]> {
-    logger.debug("MarketplaceService.search (stub)", params);
-    return []; // TODO (DOJ-2008)
+  async search(params: SearchParams): Promise<SearchResponse> {
+    const { query, category, tag, limit = 10 } = params;
+
+    const url = new URL(`${this.baseUrl}/api/marketplace/items`);
+    url.searchParams.set("query", query);
+    if (category) url.searchParams.set("category", category);
+    if (tag) url.searchParams.set("tag", tag);
+    url.searchParams.set("limit", String(limit));
+
+    const apiKey = process.env.DOJO_API_KEY ?? "";
+    logger.debug("MarketplaceService.search", { url: url.toString(), limit });
+
+    const response = await fetch(url.toString(), {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      logger.error("marketplace search request failed", {
+        status: response.status,
+        statusText: response.statusText,
+      });
+      throw new Error(
+        `API request failed: ${response.status} ${response.statusText}`,
+      );
+    }
+
+    const data = (await response.json()) as {
+      items: MarketplaceSearchResult[];
+      total: number;
+    };
+
+    return {
+      items: data.items ?? [],
+      total: data.total ?? 0,
+      hasMore: (data.total ?? 0) > (data.items?.length ?? 0),
+    };
   }
 
   async listCategories(): Promise<MarketplaceCategory[]> {
