@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { MarketplaceService } from "../services/marketplace.service.js";
+import { formatItemDetailMarkdown } from "../utils/format-detail.js";
 
 export function registerBrowseTools(
   server: McpServer,
@@ -136,5 +137,51 @@ export function registerBrowseTools(
     },
   );
 
-  return [search, listCategories, getDetails, getReviews];
+  const getItemDetail = server.tool(
+    "marketplace_detail",
+    "Get full details for a marketplace item by its slug, including description, installation instructions, config snippet, and version history",
+    {
+      slug: z
+        .string()
+        .describe(
+          "The slug identifier of the marketplace item (e.g. 'my-awesome-tool')",
+        ),
+    },
+    async (args) => {
+      try {
+        const detail = await service.getItemDetail(args.slug);
+        if (!detail) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: `Marketplace item not found: "${args.slug}". Check the slug and try again, or use marketplace_search to find available items.`,
+              },
+            ],
+            isError: true,
+          };
+        }
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: formatItemDetailMarkdown(detail),
+            },
+          ],
+        };
+      } catch (err) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Error getting item details: ${(err as Error).message}`,
+            },
+          ],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  return [search, listCategories, getDetails, getReviews, getItemDetail];
 }

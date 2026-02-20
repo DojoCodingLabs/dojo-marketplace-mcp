@@ -15,6 +15,29 @@ export interface MarketplaceItem {
   updatedAt: string;
 }
 
+export interface VersionHistoryEntry {
+  version: string;
+  releasedAt: string;
+  changelog: string;
+}
+
+export interface MarketplaceItemDetail {
+  slug: string;
+  name: string;
+  description: string;
+  category: string;
+  author_name: string;
+  install_count: number;
+  is_verified: boolean;
+  repo_url: string | null;
+  homepage_url: string | null;
+  config_snippet: Record<string, unknown>;
+  installation_instructions: string;
+  latest_version: string;
+  version_history: VersionHistoryEntry[];
+  tags: string[];
+}
+
 export interface MarketplaceCategory {
   id: string;
   name: string;
@@ -83,6 +106,11 @@ export class MarketplaceService {
   async getDetails(itemId: string): Promise<MarketplaceItem | null> {
     logger.debug("MarketplaceService.getDetails (stub)", { itemId });
     return null; // TODO (DOJ-2009)
+  }
+
+  async getItemDetail(slug: string): Promise<MarketplaceItemDetail | null> {
+    logger.debug("MarketplaceService.getItemDetail (stub)", { slug });
+    return null; // TODO (DOJ-2009): call backend get_marketplace_item_detail RPC
   }
 
   async getReviews(itemId: string): Promise<MarketplaceReview[]> {
