@@ -48,6 +48,7 @@ describe("MarketplaceService.install", () => {
 
   beforeEach(() => {
     service = new MarketplaceService("https://fake-api.test");
+    service.setApiKey("fake-key");
     vi.stubGlobal("fetch", vi.fn());
   });
 
@@ -62,7 +63,7 @@ describe("MarketplaceService.install", () => {
       .mockResolvedValueOnce(makeVersionRecordResponse())
       .mockResolvedValueOnce(new Response(null, { status: 200 }));
 
-    const result = await service.install("test-skill", undefined, "fake-key");
+    const result = await service.install("test-skill");
 
     expect(result.success).toBe(true);
     expect(result.item_name).toBe("Test Skill");
@@ -83,7 +84,7 @@ describe("MarketplaceService.install", () => {
       )
       .mockResolvedValueOnce(new Response(null, { status: 200 }));
 
-    const result = await service.install("test-skill", "2.0.0", "fake-key");
+    const result = await service.install("test-skill", "2.0.0");
 
     expect(result.success).toBe(true);
     expect(result.version_installed).toBe("2.0.0");
@@ -101,7 +102,7 @@ describe("MarketplaceService.install", () => {
         makeVersionRecordResponse({ file_hash: "DIFFERENT_HASH" }),
       );
 
-    const result = await service.install("test-skill", undefined, "fake-key");
+    const result = await service.install("test-skill");
 
     expect(result.success).toBe(false);
     expect(result.error).toContain("Integrity check failed");
@@ -114,7 +115,7 @@ describe("MarketplaceService.install", () => {
     );
 
     await expect(
-      service.install("nonexistent", undefined, "fake-key"),
+      service.install("nonexistent"),
     ).rejects.toThrow(/Failed to resolve slug/);
   });
 
@@ -125,7 +126,7 @@ describe("MarketplaceService.install", () => {
       .mockResolvedValueOnce(new Response(null, { status: 404 }));
 
     await expect(
-      service.install("test-skill", "9.9.9", "fake-key"),
+      service.install("test-skill", "9.9.9"),
     ).rejects.toThrow(/Failed to fetch version/);
   });
 });

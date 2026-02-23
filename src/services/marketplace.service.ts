@@ -153,12 +153,18 @@ export interface PublishParams {
 
 export class MarketplaceService {
   private baseUrl: string;
+  private apiKey: string;
 
   constructor(baseUrl?: string) {
     this.baseUrl =
       baseUrl ??
       process.env.DOJO_API_BASE_URL ??
       "https://api.dojocoding.io";
+    this.apiKey = process.env.DOJO_API_KEY ?? "";
+  }
+
+  setApiKey(key: string): void {
+    this.apiKey = key;
   }
 
   // Browse
@@ -171,12 +177,11 @@ export class MarketplaceService {
     if (tag) url.searchParams.set("tag", tag);
     url.searchParams.set("limit", String(limit));
 
-    const apiKey = process.env.DOJO_API_KEY ?? "";
     logger.debug("MarketplaceService.search", { url: url.toString(), limit });
 
     const response = await fetch(url.toString(), {
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${this.apiKey}`,
         "Content-Type": "application/json",
       },
     });
@@ -281,20 +286,18 @@ export class MarketplaceService {
   async install(
     slug: string,
     version?: string,
-    apiKey?: string,
   ): Promise<InstallResult> {
-    const key = apiKey ?? process.env.DOJO_API_KEY ?? "";
     logger.info("marketplace_install starting", { slug, version });
 
     // Step 1: Resolve slug -> item metadata
-    const item = await this.resolveSlug(slug, key);
+    const item = await this.resolveSlug(slug, this.apiKey);
     const targetVersion = version ?? item.latest_version;
 
     // Step 2: Get version record (file_url, file_hash, etc.)
     const versionRecord = await this.getVersionRecord(
       item.id,
       targetVersion,
-      key,
+      this.apiKey,
     );
 
     // Step 3: Download ZIP from Supabase Storage
@@ -324,7 +327,7 @@ export class MarketplaceService {
     await extractZip(zipBuffer, installDir);
 
     // Step 6: Increment download count (fire-and-forget)
-    this.incrementDownloadCount(item.id, key).catch((err) => {
+    this.incrementDownloadCount(item.id, this.apiKey).catch((err) => {
       logger.warn("incrementDownloadCount background error", {
         error: (err as Error).message,
       });

@@ -2,24 +2,28 @@ import express from "express";
 import type { Request, Response, NextFunction } from "express";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { MarketplaceService } from "../services/marketplace.service.js";
 import { getApiKeyFromHeader, validateApiKey } from "../auth/api-key.js";
 import { logger } from "../utils/logger.js";
 
-export async function startHttpServer(server: McpServer): Promise<void> {
+export async function startHttpServer(
+  server: McpServer,
+  service: MarketplaceService,
+): Promise<void> {
   const app = express();
   app.use(express.json());
 
   const port = parseInt(process.env.MCP_PORT ?? "3000", 10);
 
-  // Auth middleware
+  // Auth middleware — validate and inject API key per request
   app.use("/mcp", (req: Request, res: Response, next: NextFunction) => {
-    const authCtx = validateApiKey(
-      getApiKeyFromHeader(req.headers.authorization),
-    );
+    const apiKey = getApiKeyFromHeader(req.headers.authorization);
+    const authCtx = validateApiKey(apiKey);
     if (!authCtx.isValid) {
       res.status(401).json({ error: "Invalid or missing API key" });
       return;
     }
+    service.setApiKey(authCtx.apiKey);
     next();
   });
 
