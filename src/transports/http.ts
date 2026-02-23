@@ -6,16 +6,25 @@ import type { MarketplaceService } from "../services/marketplace.service.js";
 import { getApiKeyFromHeader, validateApiKey } from "../auth/api-key.js";
 import { logger } from "../utils/logger.js";
 
+// Extend Express Request to carry the validated API key per-request
+declare global {
+  namespace Express {
+    interface Request {
+      dojoApiKey?: string;
+    }
+  }
+}
+
 export async function startHttpServer(
   server: McpServer,
-  service: MarketplaceService,
+  _service: MarketplaceService,
 ): Promise<void> {
   const app = express();
   app.use(express.json());
 
   const port = parseInt(process.env.MCP_PORT ?? "3000", 10);
 
-  // Auth middleware — validate and inject API key per request
+  // Auth middleware — validate API key per request and attach to req
   app.use("/mcp", (req: Request, res: Response, next: NextFunction) => {
     const apiKey = getApiKeyFromHeader(req.headers.authorization);
     const authCtx = validateApiKey(apiKey);
@@ -23,7 +32,8 @@ export async function startHttpServer(
       res.status(401).json({ error: "Invalid or missing API key" });
       return;
     }
-    service.setApiKey(authCtx.apiKey);
+    // Store on request object — no shared-state mutation
+    req.dojoApiKey = authCtx.apiKey;
     next();
   });
 

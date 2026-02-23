@@ -149,6 +149,13 @@ export interface PublishParams {
   category: string;
 }
 
+// ── Options accepted by public methods ─────────────────
+
+export interface MethodOptions {
+  /** Per-call API key override — avoids shared-state race in HTTP mode. */
+  apiKey?: string;
+}
+
 // ── Service ────────────────────────────────────────────
 
 export class MarketplaceService {
@@ -163,6 +170,7 @@ export class MarketplaceService {
     this.apiKey = process.env.DOJO_API_KEY ?? "";
   }
 
+  /** Set the default API key (used when no per-call override is provided). */
   setApiKey(key: string): void {
     this.apiKey = key;
   }
@@ -172,7 +180,9 @@ export class MarketplaceService {
   private async callApi(
     action: string,
     params: Record<string, unknown> = {},
+    apiKey?: string,
   ): Promise<unknown> {
+    const effectiveKey = apiKey ?? this.apiKey;
     const url = `${this.baseUrl}/functions/v1/marketplace-mcp-api`;
     logger.debug("callApi", { action, params });
 
@@ -180,7 +190,7 @@ export class MarketplaceService {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${this.apiKey}`,
+        Authorization: `Bearer ${effectiveKey}`,
       },
       body: JSON.stringify({ action, ...params }),
       signal: AbortSignal.timeout(30_000),
@@ -199,7 +209,7 @@ export class MarketplaceService {
 
   // ── Browse ────────────────────────────────────────────
 
-  async search(params: SearchParams): Promise<SearchResponse> {
+  async search(params: SearchParams, options?: MethodOptions): Promise<SearchResponse> {
     logger.info("MarketplaceService.search", { params });
 
     const data = (await this.callApi("search", {
@@ -207,7 +217,7 @@ export class MarketplaceService {
       category: params.category,
       tag: params.tag,
       limit: params.limit ?? 10,
-    })) as { items: MarketplaceSearchResult[]; total: number };
+    }, options?.apiKey)) as { items: MarketplaceSearchResult[]; total: number };
 
     return {
       items: data.items ?? [],
@@ -216,9 +226,9 @@ export class MarketplaceService {
     };
   }
 
-  async listCategories(): Promise<MarketplaceCategory[]> {
+  async listCategories(options?: MethodOptions): Promise<MarketplaceCategory[]> {
     logger.info("MarketplaceService.listCategories");
-    const data = (await this.callApi("list_categories")) as string[];
+    const data = (await this.callApi("list_categories", {}, options?.apiKey)) as string[];
 
     const CATEGORY_DISPLAY: Record<
       string,
@@ -241,22 +251,22 @@ export class MarketplaceService {
 
     return data.map((slug) => {
       const display = CATEGORY_DISPLAY[slug] ?? {
-        name: slug.charAt(0).toUpperCase() + slug.slice(1),
+        name: slug ? slug.charAt(0).toUpperCase() + slug.slice(1) : "Unknown",
         description: "",
       };
       return { name: display.name, slug, description: display.description };
     });
   }
 
-  async getDetails(itemId: string): Promise<MarketplaceItem | null> {
+  async getDetails(itemId: string, options?: MethodOptions): Promise<MarketplaceItem | null> {
     logger.info("MarketplaceService.getDetails", { itemId });
-    const data = await this.callApi("detail", { slug: itemId });
+    const data = await this.callApi("detail", { slug: itemId }, options?.apiKey);
     return (data as MarketplaceItem) ?? null;
   }
 
-  async getItemDetail(slug: string): Promise<MarketplaceItemDetail | null> {
+  async getItemDetail(slug: string, options?: MethodOptions): Promise<MarketplaceItemDetail | null> {
     logger.info("MarketplaceService.getItemDetail", { slug });
-    const data = await this.callApi("detail", { slug });
+    const data = await this.callApi("detail", { slug }, options?.apiKey);
     return (data as MarketplaceItemDetail) ?? null;
   }
 
@@ -267,11 +277,13 @@ export class MarketplaceService {
 
   // ── Install ───────────────────────────────────────────
 
-  private async resolveSlug(slug: string): Promise<ResolvedItem> {
+  private async resolveSlug(slug: string, apiKey?: string): Promise<ResolvedItem> {
+    const effectiveKey = apiKey ?? this.apiKey;
     const url = `${this.baseUrl}/api/marketplace/items/${encodeURIComponent(slug)}`;
     logger.debug("resolveSlug", { url });
     const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${this.apiKey}` },
+      headers: { Authorization: `Bearer ${effectiveKey}` },
+      signal: AbortSignal.timeout(30_000),
     });
     if (!res.ok) {
       throw new Error(`Failed to resolve slug "${slug}": HTTP ${res.status}`);
@@ -282,11 +294,14 @@ export class MarketplaceService {
   private async getVersionRecord(
     itemId: string,
     version: string,
+    apiKey?: string,
   ): Promise<VersionRecord> {
+    const effectiveKey = apiKey ?? this.apiKey;
     const url = `${this.baseUrl}/api/marketplace/items/${encodeURIComponent(itemId)}/versions/${encodeURIComponent(version)}`;
     logger.debug("getVersionRecord", { url });
     const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${this.apiKey}` },
+      headers: { Authorization: `Bearer ${effectiveKey}` },
+      signal: AbortSignal.timeout(30_000),
     });
     if (!res.ok) {
       throw new Error(
@@ -296,16 +311,18 @@ export class MarketplaceService {
     return (await res.json()) as VersionRecord;
   }
 
-  private async incrementDownloadCount(itemId: string): Promise<void> {
+  private async incrementDownloadCount(itemId: string, apiKey?: string): Promise<void> {
+    const effectiveKey = apiKey ?? this.apiKey;
     const url = `${this.baseUrl}/api/marketplace/rpc/increment_marketplace_download`;
     logger.debug("incrementDownloadCount", { itemId });
     const res = await fetch(url, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${this.apiKey}`,
+        Authorization: `Bearer ${effectiveKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ item_id: itemId }),
+      signal: AbortSignal.timeout(30_000),
     });
     if (!res.ok) {
       logger.warn("Failed to increment download count", {
@@ -315,15 +332,15 @@ export class MarketplaceService {
     }
   }
 
-  async install(slug: string, version?: string): Promise<InstallResult> {
+  async install(slug: string, version?: string, options?: MethodOptions): Promise<InstallResult> {
     logger.info("marketplace_install starting", { slug, version });
 
     // Step 1: Resolve slug -> item metadata
-    const item = await this.resolveSlug(slug);
+    const item = await this.resolveSlug(slug, options?.apiKey);
     const targetVersion = version ?? item.latest_version;
 
     // Step 2: Get version record (file_url, file_hash, etc.)
-    const versionRecord = await this.getVersionRecord(item.id, targetVersion);
+    const versionRecord = await this.getVersionRecord(item.id, targetVersion, options?.apiKey);
 
     // Step 3: Download ZIP from Supabase Storage
     const zipBuffer = await downloadFile(versionRecord.file_url);
@@ -352,7 +369,7 @@ export class MarketplaceService {
     await extractZip(zipBuffer, installDir);
 
     // Step 6: Increment download count (fire-and-forget)
-    this.incrementDownloadCount(item.id).catch((err) => {
+    this.incrementDownloadCount(item.id, options?.apiKey).catch((err) => {
       logger.warn("incrementDownloadCount background error", {
         error: (err as Error).message,
       });
@@ -376,17 +393,17 @@ export class MarketplaceService {
     };
   }
 
-  async uninstall(itemId: string): Promise<UninstallResult> {
+  async uninstall(itemId: string, options?: MethodOptions): Promise<UninstallResult> {
     logger.info("MarketplaceService.uninstall", { itemId });
     const data = (await this.callApi("uninstall", {
       slug: itemId,
-    })) as UninstallResult;
+    }, options?.apiKey)) as UninstallResult;
     return data;
   }
 
-  async listInstalled(): Promise<InstalledItem[]> {
+  async listInstalled(options?: MethodOptions): Promise<InstalledItem[]> {
     logger.info("MarketplaceService.listInstalled");
-    const data = (await this.callApi("list_installed")) as InstalledItem[];
+    const data = (await this.callApi("list_installed", {}, options?.apiKey)) as InstalledItem[];
     return data ?? [];
   }
 
