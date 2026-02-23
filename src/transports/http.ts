@@ -6,15 +6,6 @@ import type { MarketplaceService } from "../services/marketplace.service.js";
 import { getApiKeyFromHeader, validateApiKey } from "../auth/api-key.js";
 import { logger } from "../utils/logger.js";
 
-// Extend Express Request to carry the validated API key per-request
-declare global {
-  namespace Express {
-    interface Request {
-      dojoApiKey?: string;
-    }
-  }
-}
-
 export async function startHttpServer(
   server: McpServer,
   _service: MarketplaceService,
@@ -32,8 +23,8 @@ export async function startHttpServer(
       res.status(401).json({ error: "Invalid or missing API key" });
       return;
     }
-    // Store on request object — no shared-state mutation
-    req.dojoApiKey = authCtx.apiKey;
+    // Store on res.locals — no shared-state mutation, no type augmentation
+    res.locals.dojoApiKey = authCtx.apiKey;
     next();
   });
 
