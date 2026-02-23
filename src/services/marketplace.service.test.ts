@@ -131,49 +131,176 @@ describe("MarketplaceService.install", () => {
   });
 });
 
-// ── listInstalled tests ────────────────────────────────
+// ── callApi-based method tests ────────────────────────
 
 describe("MarketplaceService.listInstalled", () => {
-  it("returns an array of InstalledItem objects", async () => {
-    const service = new MarketplaceService();
-    const items = await service.listInstalled();
+  let service: MarketplaceService;
 
-    expect(Array.isArray(items)).toBe(true);
+  beforeEach(() => {
+    service = new MarketplaceService("https://fake-api.test");
+    service.setApiKey("fake-key");
+    vi.stubGlobal("fetch", vi.fn());
   });
 
-  it("returns items with all required fields", async () => {
-    const service = new MarketplaceService();
-    const items = await service.listInstalled();
-
-    for (const item of items) {
-      expect(typeof item.name).toBe("string");
-      expect(typeof item.slug).toBe("string");
-      expect(typeof item.category).toBe("string");
-      expect(typeof item.version_installed).toBe("string");
-      expect(typeof item.installed_at).toBe("string");
-      expect(typeof item.is_verified).toBe("boolean");
-      expect(typeof item.has_update).toBe("boolean");
-    }
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
-  it("returns items sorted by installed_at descending", async () => {
-    const service = new MarketplaceService();
+  it("calls list_installed action and returns the result", async () => {
+    const mockItems = [
+      {
+        name: "Test Skill",
+        slug: "test-skill",
+        category: "skill",
+        version_installed: "1.0.0",
+        installed_at: "2026-02-15T10:30:00Z",
+        is_verified: true,
+        has_update: false,
+      },
+    ];
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify(mockItems), { status: 200 }),
+    );
+
     const items = await service.listInstalled();
 
-    for (let i = 1; i < items.length; i++) {
-      const prev = new Date(items[i - 1].installed_at).getTime();
-      const curr = new Date(items[i].installed_at).getTime();
-      expect(prev).toBeGreaterThanOrEqual(curr);
-    }
+    expect(items).toEqual(mockItems);
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+      "https://fake-api.test/functions/v1/marketplace-mcp-api",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ action: "list_installed" }),
+      }),
+    );
   });
 
-  it("returns installed_at as valid ISO 8601 strings", async () => {
-    const service = new MarketplaceService();
-    const items = await service.listInstalled();
+  it("returns empty array when API returns null", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response("null", { status: 200 }),
+    );
 
-    for (const item of items) {
-      const date = new Date(item.installed_at);
-      expect(isNaN(date.getTime())).toBe(false);
-    }
+    const items = await service.listInstalled();
+    expect(items).toEqual([]);
+  });
+});
+
+describe("MarketplaceService.search", () => {
+  let service: MarketplaceService;
+
+  beforeEach(() => {
+    service = new MarketplaceService("https://fake-api.test");
+    service.setApiKey("fake-key");
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("calls search action with params and returns formatted result", async () => {
+    const mockData = {
+      items: [{ name: "Skill A", slug: "skill-a" }],
+      total: 1,
+    };
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify(mockData), { status: 200 }),
+    );
+
+    const result = await service.search({ query: "test", limit: 5 });
+
+    expect(result.items).toEqual(mockData.items);
+    expect(result.total).toBe(1);
+    expect(result.hasMore).toBe(false);
+  });
+});
+
+describe("MarketplaceService.listCategories", () => {
+  let service: MarketplaceService;
+
+  beforeEach(() => {
+    service = new MarketplaceService("https://fake-api.test");
+    service.setApiKey("fake-key");
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("maps category slugs to full category objects", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify(["skill", "plugin", "tool"]), {
+        status: 200,
+      }),
+    );
+
+    const categories = await service.listCategories();
+
+    expect(categories).toEqual([
+      {
+        name: "Skills",
+        slug: "skill",
+        description: "Reusable skill files for AI coding assistants",
+      },
+      {
+        name: "Plugins",
+        slug: "plugin",
+        description: "MCP server plugins that extend assistant capabilities",
+      },
+      {
+        name: "Tools",
+        slug: "tool",
+        description: "Standalone developer tools and CLI utilities",
+      },
+    ]);
+  });
+
+  it("handles unknown categories gracefully", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify(["skill", "unknown"]), { status: 200 }),
+    );
+
+    const categories = await service.listCategories();
+
+    expect(categories[1]).toEqual({
+      name: "Unknown",
+      slug: "unknown",
+      description: "",
+    });
+  });
+});
+
+describe("MarketplaceService.uninstall", () => {
+  let service: MarketplaceService;
+
+  beforeEach(() => {
+    service = new MarketplaceService("https://fake-api.test");
+    service.setApiKey("fake-key");
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("calls uninstall action with slug", async () => {
+    const mockResult = {
+      success: true,
+      item_name: "test-skill",
+      removal_instructions: "Removed.",
+    };
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify(mockResult), { status: 200 }),
+    );
+
+    const result = await service.uninstall("test-skill");
+
+    expect(result).toEqual(mockResult);
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+      "https://fake-api.test/functions/v1/marketplace-mcp-api",
+      expect.objectContaining({
+        body: JSON.stringify({ action: "uninstall", slug: "test-skill" }),
+      }),
+    );
   });
 });
