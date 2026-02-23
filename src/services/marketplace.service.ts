@@ -45,9 +45,9 @@ export interface MarketplaceItemDetail {
 }
 
 export interface MarketplaceCategory {
-  id: string;
   name: string;
-  itemCount: number;
+  slug: string;
+  description: string;
 }
 
 export interface MarketplaceReview {
@@ -149,52 +149,75 @@ export interface PublishParams {
   category: string;
 }
 
+// ── Options accepted by public methods ─────────────────
+
+export interface MethodOptions {
+  /** Per-call API key override — avoids shared-state race in HTTP mode. */
+  apiKey?: string;
+}
+
 // ── Service ────────────────────────────────────────────
 
 export class MarketplaceService {
   private baseUrl: string;
+  private apiKey: string;
 
   constructor(baseUrl?: string) {
     this.baseUrl =
       baseUrl ??
       process.env.DOJO_API_BASE_URL ??
       "https://api.dojocoding.io";
+    this.apiKey = process.env.DOJO_API_KEY ?? "";
   }
 
-  // Browse
-  async search(params: SearchParams): Promise<SearchResponse> {
-    const { query, category, tag, limit = 10 } = params;
+  /** Set the default API key (used when no per-call override is provided). */
+  setApiKey(key: string): void {
+    this.apiKey = key;
+  }
 
-    const url = new URL(`${this.baseUrl}/api/marketplace/items`);
-    url.searchParams.set("query", query);
-    if (category) url.searchParams.set("category", category);
-    if (tag) url.searchParams.set("tag", tag);
-    url.searchParams.set("limit", String(limit));
+  // ── Internal API caller ───────────────────────────────
 
-    const apiKey = process.env.DOJO_API_KEY ?? "";
-    logger.debug("MarketplaceService.search", { url: url.toString(), limit });
+  private async callApi(
+    action: string,
+    params: Record<string, unknown> = {},
+    apiKey?: string,
+  ): Promise<unknown> {
+    const effectiveKey = apiKey ?? this.apiKey;
+    const url = `${this.baseUrl}/functions/v1/marketplace-mcp-api`;
+    logger.debug("callApi", { action, params });
 
-    const response = await fetch(url.toString(), {
+    const response = await fetch(url, {
+      method: "POST",
       headers: {
-        Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
+        Authorization: `Bearer ${effectiveKey}`,
       },
+      body: JSON.stringify({ action, ...params }),
+      signal: AbortSignal.timeout(30_000),
     });
 
     if (!response.ok) {
-      logger.error("marketplace search request failed", {
-        status: response.status,
-        statusText: response.statusText,
-      });
+      const error = await response.json().catch(() => ({}));
       throw new Error(
-        `API request failed: ${response.status} ${response.statusText}`,
+        (error as Record<string, string>).error ||
+          `API error: ${response.status}`,
       );
     }
 
-    const data = (await response.json()) as {
-      items: MarketplaceSearchResult[];
-      total: number;
-    };
+    return response.json();
+  }
+
+  // ── Browse ────────────────────────────────────────────
+
+  async search(params: SearchParams, options?: MethodOptions): Promise<SearchResponse> {
+    logger.info("MarketplaceService.search", { params });
+
+    const data = (await this.callApi("search", {
+      query: params.query,
+      category: params.category,
+      tag: params.tag,
+      limit: params.limit ?? 10,
+    }, options?.apiKey)) as { items: MarketplaceSearchResult[]; total: number };
 
     return {
       items: data.items ?? [],
@@ -203,36 +226,64 @@ export class MarketplaceService {
     };
   }
 
-  async listCategories(): Promise<MarketplaceCategory[]> {
-    logger.debug("MarketplaceService.listCategories (stub)");
-    return []; // TODO (DOJ-2008)
+  async listCategories(options?: MethodOptions): Promise<MarketplaceCategory[]> {
+    logger.info("MarketplaceService.listCategories");
+    const data = (await this.callApi("list_categories", {}, options?.apiKey)) as string[];
+
+    const CATEGORY_DISPLAY: Record<
+      string,
+      { name: string; description: string }
+    > = {
+      skill: {
+        name: "Skills",
+        description: "Reusable skill files for AI coding assistants",
+      },
+      plugin: {
+        name: "Plugins",
+        description: "MCP server plugins that extend assistant capabilities",
+      },
+      tool: {
+        name: "Tools",
+        description:
+          "Standalone developer tools and CLI utilities",
+      },
+    };
+
+    return data.map((slug) => {
+      const display = CATEGORY_DISPLAY[slug] ?? {
+        name: slug ? slug.charAt(0).toUpperCase() + slug.slice(1) : "Unknown",
+        description: "",
+      };
+      return { name: display.name, slug, description: display.description };
+    });
   }
 
-  async getDetails(itemId: string): Promise<MarketplaceItem | null> {
-    logger.debug("MarketplaceService.getDetails (stub)", { itemId });
-    return null; // TODO (DOJ-2009)
+  async getDetails(itemId: string, options?: MethodOptions): Promise<MarketplaceItem | null> {
+    logger.info("MarketplaceService.getDetails", { itemId });
+    const data = await this.callApi("detail", { slug: itemId }, options?.apiKey);
+    return (data as MarketplaceItem) ?? null;
   }
 
-  async getItemDetail(slug: string): Promise<MarketplaceItemDetail | null> {
-    logger.debug("MarketplaceService.getItemDetail (stub)", { slug });
-    return null; // TODO (DOJ-2009): call backend get_marketplace_item_detail RPC
+  async getItemDetail(slug: string, options?: MethodOptions): Promise<MarketplaceItemDetail | null> {
+    logger.info("MarketplaceService.getItemDetail", { slug });
+    const data = await this.callApi("detail", { slug }, options?.apiKey);
+    return (data as MarketplaceItemDetail) ?? null;
   }
 
   async getReviews(itemId: string): Promise<MarketplaceReview[]> {
     logger.debug("MarketplaceService.getReviews (stub)", { itemId });
-    return []; // TODO (DOJ-2009)
+    return []; // TODO: Not supported by Edge Function yet
   }
 
-  // Install
+  // ── Install ───────────────────────────────────────────
 
-  private async resolveSlug(
-    slug: string,
-    apiKey: string,
-  ): Promise<ResolvedItem> {
+  private async resolveSlug(slug: string, apiKey?: string): Promise<ResolvedItem> {
+    const effectiveKey = apiKey ?? this.apiKey;
     const url = `${this.baseUrl}/api/marketplace/items/${encodeURIComponent(slug)}`;
     logger.debug("resolveSlug", { url });
     const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${apiKey}` },
+      headers: { Authorization: `Bearer ${effectiveKey}` },
+      signal: AbortSignal.timeout(30_000),
     });
     if (!res.ok) {
       throw new Error(`Failed to resolve slug "${slug}": HTTP ${res.status}`);
@@ -243,32 +294,35 @@ export class MarketplaceService {
   private async getVersionRecord(
     itemId: string,
     version: string,
-    apiKey: string,
+    apiKey?: string,
   ): Promise<VersionRecord> {
+    const effectiveKey = apiKey ?? this.apiKey;
     const url = `${this.baseUrl}/api/marketplace/items/${encodeURIComponent(itemId)}/versions/${encodeURIComponent(version)}`;
     logger.debug("getVersionRecord", { url });
     const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${apiKey}` },
+      headers: { Authorization: `Bearer ${effectiveKey}` },
+      signal: AbortSignal.timeout(30_000),
     });
     if (!res.ok) {
-      throw new Error(`Failed to fetch version "${version}": HTTP ${res.status}`);
+      throw new Error(
+        `Failed to fetch version "${version}": HTTP ${res.status}`,
+      );
     }
     return (await res.json()) as VersionRecord;
   }
 
-  private async incrementDownloadCount(
-    itemId: string,
-    apiKey: string,
-  ): Promise<void> {
+  private async incrementDownloadCount(itemId: string, apiKey?: string): Promise<void> {
+    const effectiveKey = apiKey ?? this.apiKey;
     const url = `${this.baseUrl}/api/marketplace/rpc/increment_marketplace_download`;
     logger.debug("incrementDownloadCount", { itemId });
     const res = await fetch(url, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${effectiveKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ item_id: itemId }),
+      signal: AbortSignal.timeout(30_000),
     });
     if (!res.ok) {
       logger.warn("Failed to increment download count", {
@@ -278,24 +332,15 @@ export class MarketplaceService {
     }
   }
 
-  async install(
-    slug: string,
-    version?: string,
-    apiKey?: string,
-  ): Promise<InstallResult> {
-    const key = apiKey ?? process.env.DOJO_API_KEY ?? "";
+  async install(slug: string, version?: string, options?: MethodOptions): Promise<InstallResult> {
     logger.info("marketplace_install starting", { slug, version });
 
     // Step 1: Resolve slug -> item metadata
-    const item = await this.resolveSlug(slug, key);
+    const item = await this.resolveSlug(slug, options?.apiKey);
     const targetVersion = version ?? item.latest_version;
 
     // Step 2: Get version record (file_url, file_hash, etc.)
-    const versionRecord = await this.getVersionRecord(
-      item.id,
-      targetVersion,
-      key,
-    );
+    const versionRecord = await this.getVersionRecord(item.id, targetVersion, options?.apiKey);
 
     // Step 3: Download ZIP from Supabase Storage
     const zipBuffer = await downloadFile(versionRecord.file_url);
@@ -315,7 +360,7 @@ export class MarketplaceService {
         instructions: "",
         post_install_notes: "",
         file_hash: computedHash,
-        error: "Integrity check failed \u2014 file hash mismatch",
+        error: "Integrity check failed — file hash mismatch",
       };
     }
 
@@ -324,7 +369,7 @@ export class MarketplaceService {
     await extractZip(zipBuffer, installDir);
 
     // Step 6: Increment download count (fire-and-forget)
-    this.incrementDownloadCount(item.id, key).catch((err) => {
+    this.incrementDownloadCount(item.id, options?.apiKey).catch((err) => {
       logger.warn("incrementDownloadCount background error", {
         error: (err as Error).message,
       });
@@ -348,57 +393,25 @@ export class MarketplaceService {
     };
   }
 
-  async uninstall(itemId: string): Promise<UninstallResult> {
-    logger.debug("MarketplaceService.uninstall (stub)", { itemId });
-    // TODO: Call Dojo backend toggle_marketplace_install RPC (uninstall action)
-    return {
-      success: true,
-      item_name: itemId,
-      removal_instructions: "No removal steps required.",
-    };
+  async uninstall(itemId: string, options?: MethodOptions): Promise<UninstallResult> {
+    logger.info("MarketplaceService.uninstall", { itemId });
+    const data = (await this.callApi("uninstall", {
+      slug: itemId,
+    }, options?.apiKey)) as UninstallResult;
+    return data;
   }
 
-  async listInstalled(): Promise<InstalledItem[]> {
-    logger.debug("MarketplaceService.listInstalled (stub)");
-    // TODO (DOJ-2011): Replace with real get_user_marketplace_installs RPC call.
-    // Real implementation: fetch installs, compare version_installed against
-    // latest available version to derive has_update, sort by installed_at desc.
-    const items: InstalledItem[] = [
-      {
-        name: "Dojo TypeScript Snippets",
-        slug: "dojo-ts-snippets",
-        category: "snippets",
-        version_installed: "1.2.0",
-        installed_at: "2026-02-15T10:30:00Z",
-        is_verified: true,
-        has_update: true,
-      },
-      {
-        name: "React Component Generator",
-        slug: "react-component-gen",
-        category: "generators",
-        version_installed: "2.0.1",
-        installed_at: "2026-02-10T08:00:00Z",
-        is_verified: true,
-        has_update: false,
-      },
-      {
-        name: "ESLint Config Dojo",
-        slug: "eslint-config-dojo",
-        category: "configs",
-        version_installed: "0.9.0",
-        installed_at: "2026-01-28T14:00:00Z",
-        is_verified: false,
-        has_update: false,
-      },
-    ];
-    return items;
+  async listInstalled(options?: MethodOptions): Promise<InstalledItem[]> {
+    logger.info("MarketplaceService.listInstalled");
+    const data = (await this.callApi("list_installed", {}, options?.apiKey)) as InstalledItem[];
+    return data ?? [];
   }
 
-  // Publish
+  // ── Publish (stubs — not yet supported by Edge Function) ──
+
   async publish(params: PublishParams): Promise<MarketplaceItem | null> {
     logger.debug("MarketplaceService.publish (stub)", params);
-    return null;
+    return null; // TODO: implement when Edge Function supports publish
   }
 
   async updateListing(
@@ -409,22 +422,23 @@ export class MarketplaceService {
       itemId,
       updates,
     });
-    return null;
+    return null; // TODO: implement when Edge Function supports update
   }
 
   async deprecate(itemId: string): Promise<boolean> {
     logger.debug("MarketplaceService.deprecate (stub)", { itemId });
-    return false;
+    return false; // TODO: implement when Edge Function supports deprecate
   }
 
-  // Account
+  // ── Account (stubs — not yet supported by Edge Function) ──
+
   async getProfile(): Promise<UserProfile | null> {
     logger.debug("MarketplaceService.getProfile (stub)");
-    return null;
+    return null; // TODO: implement when Edge Function supports profile
   }
 
   async getPurchases(): Promise<MarketplaceItem[]> {
     logger.debug("MarketplaceService.getPurchases (stub)");
-    return [];
+    return []; // TODO: implement when Edge Function supports purchases
   }
 }

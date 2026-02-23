@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { MarketplaceService } from "../services/marketplace.service.js";
 import { registerInstallTools } from "./install.tools.js";
@@ -10,8 +10,11 @@ describe("marketplace_uninstall", () => {
   let toolHandler: (args: { itemId: string }) => Promise<any>;
 
   beforeEach(() => {
-    service = new MarketplaceService("https://fake.api");
+    service = new MarketplaceService("https://fake-api.test");
+    service.setApiKey("fake-key");
     server = new McpServer({ name: "test", version: "0.0.0" });
+
+    vi.stubGlobal("fetch", vi.fn());
 
     // Spy on server.tool to capture the handler callback for marketplace_uninstall
     const originalTool = server.tool.bind(server);
@@ -30,8 +33,26 @@ describe("marketplace_uninstall", () => {
     registerInstallTools(server, service);
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function mockUninstallResponse(overrides = {}) {
+    const body = {
+      success: true,
+      item_name: "test-item",
+      removal_instructions: "No removal steps required.",
+      ...overrides,
+    };
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify(body), { status: 200 }),
+    );
+    return body;
+  }
+
   describe("service layer", () => {
     it("returns a structured UninstallResult", async () => {
+      mockUninstallResponse({ item_name: "my-skill-slug" });
       const result = await service.uninstall("my-skill-slug");
       expect(result).toEqual({
         success: true,
@@ -41,7 +62,9 @@ describe("marketplace_uninstall", () => {
     });
 
     it("is idempotent — calling twice returns success both times", async () => {
+      mockUninstallResponse();
       const first = await service.uninstall("already-uninstalled");
+      mockUninstallResponse();
       const second = await service.uninstall("already-uninstalled");
       expect(first.success).toBe(true);
       expect(second.success).toBe(true);
@@ -50,6 +73,7 @@ describe("marketplace_uninstall", () => {
 
   describe("tool handler", () => {
     it("returns JSON-serialized UninstallResult on success", async () => {
+      mockUninstallResponse({ item_name: "my-skill" });
       const response = await toolHandler({ itemId: "my-skill" });
       const parsed = JSON.parse(response.content[0].text);
       expect(parsed).toEqual({
@@ -60,6 +84,7 @@ describe("marketplace_uninstall", () => {
     });
 
     it("does not set isError on success", async () => {
+      mockUninstallResponse();
       const response = await toolHandler({ itemId: "anything" });
       expect(response.isError).toBeUndefined();
     });
@@ -74,6 +99,7 @@ describe("marketplace_uninstall", () => {
     });
 
     it("includes removal_instructions in response", async () => {
+      mockUninstallResponse({ item_name: "my-tool" });
       const response = await toolHandler({ itemId: "my-tool" });
       const parsed = JSON.parse(response.content[0].text);
       expect(parsed).toHaveProperty("removal_instructions");

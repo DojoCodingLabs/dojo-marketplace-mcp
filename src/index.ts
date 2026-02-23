@@ -87,7 +87,7 @@ async function main() {
 
   // Start transport
   if (transportMode === "http") {
-    await startHttpServer(server);
+    await startHttpServer(server, service);
   } else {
     await connectStdio(server);
   }
