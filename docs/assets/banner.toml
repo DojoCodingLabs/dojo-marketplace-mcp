@@ -1,0 +1,11 @@
+name = "Dojo Marketplace MCP"
+tagline = "The marketplace in your [AI assistant]"
+chips = ["4 toolsets / stdio + HTTP"]
+meta = "Open source · TypeScript"
+tile = "{ }"
+
+[card]
+kind = "tools"
+label = "MCP server"
+status = "v0.1.0 · MIT"
+tools = ["marketplace_search", "marketplace_get_details", "marketplace_install", "marketplace_publish"]
