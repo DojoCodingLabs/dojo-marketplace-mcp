@@ -1,6 +1,22 @@
-# @dojocoding/marketplace-mcp
+<p align="center">
+  <a href="https://dojocoding.io">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="docs/assets/banner-dark.svg">
+      <source media="(prefers-color-scheme: light)" srcset="docs/assets/banner-light.svg">
+      <img alt="Dojo Marketplace MCP by Dojo Coding: The marketplace in your AI assistant" src="docs/assets/banner-light.svg" width="100%">
+    </picture>
+  </a>
+</p>
+
+# Dojo Marketplace MCP
+
+**An MCP server for builders who want to find, install and publish Dojo Marketplace skills, plugins and tools from their AI coding assistant.**
 
 MCP server for the Dojo Marketplace. Browse, install, and publish marketplace items directly from AI coding assistants.
+
+[![Version 0.1.0](https://img.shields.io/badge/version-0.1.0-FF7151?labelColor=201E3D)](package.json) [![License MIT](https://img.shields.io/badge/license-MIT-FF7151?labelColor=201E3D)](LICENSE) [![Node.js 18+](https://img.shields.io/badge/Node.js-18%2B-201E3D?labelColor=201E3D)](https://nodejs.org)
+
+[Get started](#quick-start) · [Tools](#available-tools) · [Configuration](#configuration) · [Development](#development) · [Report an issue](https://github.com/DojoCodingLabs/dojo-marketplace-mcp/issues/new)
 
 ## Quick Start
 
@@ -77,4 +93,8 @@ npm run start:http   # HTTP mode
 
 ## License
 
-MIT
+[MIT](LICENSE). Built by [Dojo Coding](https://dojocoding.io).
+
+<p align="center">
+  <a href="https://dojocoding.io"><img src="docs/assets/dojocoding-mark.png" alt="Dojo Coding" width="48"></a>
+</p>
